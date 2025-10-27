@@ -1,0 +1,7 @@
+[package]
+name = "ssbt-server"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+ssbt-lib = { path = "../ssbt-lib" } # Dependency on the shared library
