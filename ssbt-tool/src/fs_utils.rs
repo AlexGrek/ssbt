@@ -2,53 +2,68 @@ use std::{
     fs,
     path::{Path, PathBuf},
 };
-use anyhow::{anyhow, Context, Result};
+use anyhow::{Context, Result};
 use crate::Config;
 
-/// Recursively collect all files and empty directories from paths in config.
+use glob::Pattern;
+
+/// Recursively lists all files from `config.paths`, excluding any that match `config.skip` patterns.
 pub fn list_total_files(config: &Config) -> Result<Vec<PathBuf>> {
-    let mut all: Vec<PathBuf> = Vec::new();
+    let mut result = Vec::new();
 
-    let paths = config
-        .paths
+    // Compile skip patterns with proper error handling
+    let skip_patterns: Vec<Pattern> = config
+        .skip
         .as_ref()
-        .ok_or_else(|| anyhow!("No paths specified"))?;
+        .map(|patterns| {
+            patterns
+                .iter()
+                .map(|p| Pattern::new(p).with_context(|| format!("invalid skip pattern: {p}")))
+                .collect::<Result<Vec<_>>>()
+        })
+        .transpose()?
+        .unwrap_or_default();
 
-    for path in paths {
-        let path = Path::new(path);
-        if !path.exists() {
-            eprintln!("Warning: path not found: {}", path.display());
-            continue;
+    fn is_skipped(path: &Path, patterns: &[Pattern]) -> bool {
+        let path_str = path.to_string_lossy();
+        patterns.iter().any(|p| p.matches(&path_str))
+    }
+
+    fn walk_dir(dir: &Path, patterns: &[Pattern], result: &mut Vec<PathBuf>) -> Result<()> {
+        for entry in fs::read_dir(dir).with_context(|| format!("reading directory {dir:?}"))? {
+            let entry = entry?;
+            let path = entry.path();
+
+            if is_skipped(&path, patterns) {
+                continue;
+            }
+
+            if path.is_dir() {
+                walk_dir(&path, patterns, result)?;
+            } else {
+                result.push(path);
+            }
         }
-        if path.is_file() {
-            all.push(path.to_path_buf());
-        } else if path.is_dir() {
-            walk_dir(path, &mut all)?;
+        Ok(())
+    }
+
+    if let Some(paths) = &config.paths {
+        for p in paths {
+            let path = PathBuf::from(p);
+            if !path.exists() {
+                continue;
+            }
+            if path.is_file() {
+                if !is_skipped(&path, &skip_patterns) {
+                    result.push(path);
+                }
+            } else {
+                walk_dir(&path, &skip_patterns, &mut result)?;
+            }
         }
     }
 
-    Ok(all)
-}
-
-/// Helper: recursive walk that includes files and empty dirs.
-fn walk_dir(dir: &Path, out: &mut Vec<PathBuf>) -> Result<()> {
-    let mut has_entries = false;
-    for entry in fs::read_dir(dir).with_context(|| format!("Reading dir {}", dir.display()))? {
-        has_entries = true;
-        let entry = entry?;
-        let path = entry.path();
-        if path.is_file() {
-            out.push(path);
-        } else if path.is_dir() {
-            walk_dir(&path, out)?;
-        }
-    }
-
-    // include empty dirs
-    if !has_entries {
-        out.push(dir.to_path_buf());
-    }
-    Ok(())
+    Ok(result)
 }
 
 /// Compute total size of all files and check against max_size limit.
