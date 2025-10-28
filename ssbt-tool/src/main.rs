@@ -1,7 +1,9 @@
+pub mod fs_utils;
+pub mod packaging;
+
 use clap::Parser;
 use serde::{Deserialize, Serialize};
 use std::{collections::HashMap, env, fs};
-mod fs_utils;
 use fs_utils::{list_total_files, total_size};
 
 use crate::fs_utils::encode_size;
