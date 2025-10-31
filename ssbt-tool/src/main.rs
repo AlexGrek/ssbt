@@ -1,17 +1,23 @@
 pub mod fs_utils;
 pub mod packaging;
 pub mod sink;
+pub mod process;
 
+use anyhow::anyhow;
 use clap::Parser;
 use fs_utils::{list_total_files, total_size};
 use serde::{Deserialize, Serialize};
-use std::{collections::HashMap, env, fs};
+use std::{
+    collections::HashMap,
+    env, fs,
+    path::{Path, PathBuf},
+};
 
-use crate::fs_utils::encode_size;
+use crate::{fs_utils::encode_size, packaging::zip::stream_zip_to_sink, process::process_files_within_tokio, sink::OutSink};
 
 #[derive(Debug, Serialize, Deserialize, Clone, Default)]
 #[serde(default)]
-struct Config {
+pub struct Config {
     output: Option<String>,
     config: Option<String>,
     format: Option<String>,
@@ -143,16 +149,21 @@ fn main() -> anyhow::Result<()> {
         let files = list_total_files(&merged)?;
         let total = total_size(&merged, &files)?;
         println!("Total files: {}", files.len());
-        println!("Total size: {} bytes", encode_size(total));
+        println!("Total size: {}", encode_size(total));
         for f in files {
             println!("{}", f.display());
         }
         return Ok(());
     }
 
-    println!("No --dry specified, would perform backup here.");
+    let files = list_total_files(&merged)?;
+    let total = total_size(&merged, &files)?;
+    println!("Total files: {}", files.len());
+    println!("Total size: {}", encode_size(total));
+    process_files_within_tokio(merged, files).map_err(|e| anyhow!("{}", e))?;
     Ok(())
 }
+
 
 /// Reads environment variables prefixed with SSBT_
 fn read_env() -> Config {

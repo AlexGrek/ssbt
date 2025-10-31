@@ -7,6 +7,8 @@ use tokio_util::compat::{TokioAsyncWriteCompatExt, TokioAsyncReadCompatExt};
 use futures::io::AsyncWriteExt as FuturesAsyncWriteExt;
 use std::path::{Path, PathBuf};
 
+use crate::sink::OutSink;
+
 /// Streams files into a zip archive without buffering the entire zip in memory.
 /// 
 /// # Arguments
@@ -191,15 +193,6 @@ pub async fn create_file_writer<P: AsRef<Path>>(
     let file = File::create(path).await?;
     
     Ok(file)
-}
-
-/// Defines where the zip archive should be sent.
-#[derive(Debug, Clone)]
-pub enum OutSink {
-    /// Save the archive to a local file at the given path.
-    SaveToFile(PathBuf),
-    /// Upload the archive to a remote URL via HTTP POST.
-    UploadToUrl(String),
 }
 
 /// Streams zip archive to the specified output sink.
