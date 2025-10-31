@@ -2,6 +2,7 @@ use std::path::{Path, PathBuf};
 
 use crate::packaging::zip::stream_zip_to_writer;
 use anyhow::anyhow;
+use async_zip::Compression;
 
 pub mod save_file;
 pub mod send_net;
@@ -27,20 +28,21 @@ pub enum OutSink {
 ///         ("readme.txt", "/tmp/readme.txt"),
 ///         ("config.json", "/tmp/config.json"),
 ///     ];
-///     
+///
 ///     // Save to file
 ///     let sink = OutSink::SaveToFile(PathBuf::from("backups/archive.zip"));
 ///     stream_zip_to_sink(files.clone(), sink).await?;
-///     
+///
 ///     // Upload via HTTP
 ///     let sink = OutSink::UploadToUrl("https://api.example.com/upload".to_string());
 ///     stream_zip_to_sink(files, sink).await?;
-///     
+///
 ///     Ok(())
 /// }
 /// ```
 pub async fn stream_zip_to_sink<I, S1, S2>(
     files: I,
+    compression: Compression,
     sink: OutSink,
 ) -> Result<(), Box<dyn std::error::Error>>
 where
@@ -51,7 +53,7 @@ where
     match sink {
         OutSink::SaveToFile(path) => {
             let writer = save_file::create_file_writer(path).await?;
-            stream_zip_to_writer(files, writer).await?;
+            stream_zip_to_writer(files, compression, writer).await?;
         }
         OutSink::UploadToUrl(url) => {
             // Create a pipe: writer end for zip, reader end for HTTP
@@ -78,7 +80,7 @@ where
             });
 
             // Stream zip to the writer end
-            stream_zip_to_writer(files, writer).await?;
+            stream_zip_to_writer(files, compression, writer).await?;
 
             // Wait for upload to complete and convert the error
             upload_task

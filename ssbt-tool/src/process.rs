@@ -1,5 +1,7 @@
 use std::path::{Path, PathBuf};
 
+use async_zip::Compression;
+
 use crate::{
     Config,
     sink::{OutSink, stream_zip_to_sink},
@@ -82,7 +84,15 @@ async fn process_files(
         return Ok(());
     }
 
-    stream_zip_to_sink(entries, sink).await?;
+    let compression_decision = config.compress.unwrap_or(false);
+
+    let compression = if compression_decision {
+        Compression::Deflate
+    } else {
+        Compression::Stored
+    };
+
+    stream_zip_to_sink(entries, compression, sink).await?;
     println!("Archive created successfully!");
 
     Ok(())

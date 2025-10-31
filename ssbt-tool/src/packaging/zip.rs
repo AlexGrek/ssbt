@@ -21,17 +21,18 @@ use tokio_util::compat::{TokioAsyncReadCompatExt, TokioAsyncWriteCompatExt};
 ///         ("document.txt", "/path/to/file1.txt"),
 ///         ("folder/image.png", "/path/to/file2.png"),
 ///     ];
-///     
+///
 ///     // Stream to file
 ///     let output = File::create("archive.zip").await?;
 ///     stream_zip_to_writer(files, output).await?;
-///     
+///
 ///     // Or stream to HTTP response, S3, etc.
 ///     Ok(())
 /// }
 /// ```
 pub async fn stream_zip_to_writer<W, I, S1, S2>(
     files: I,
+    compression: Compression,
     output: W,
 ) -> Result<(), Box<dyn std::error::Error>>
 where
@@ -50,11 +51,8 @@ where
         // Get file metadata for proper zip entry
         let metadata = tokio::fs::metadata(file_path).await?;
 
-        let builder = ZipEntryBuilder::new(
-            archive_name.as_ref().to_string().into(),
-            Compression::Deflate,
-        )
-        .last_modification_date(get_modification_time(&metadata));
+        let builder = ZipEntryBuilder::new(archive_name.as_ref().to_string().into(), compression)
+            .last_modification_date(get_modification_time(&metadata));
 
         // Stream file directly into zip entry with small buffer
         let mut entry_writer = writer.write_entry_stream(builder).await?;
