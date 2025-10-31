@@ -1,3 +1,4 @@
+use crate::naming::create_file_name;
 use std::path::{Path, PathBuf};
 
 use async_zip::Compression;
@@ -13,13 +14,10 @@ fn get_output_sink(config: &Config) -> Result<OutSink, Box<dyn std::error::Error
             if output.starts_with("http://") || output.starts_with("https://") {
                 Ok(OutSink::UploadToUrl(output.clone()))
             } else {
-                Ok(OutSink::SaveToFile(PathBuf::from(output)))
+                Ok(OutSink::SaveToFile(create_file_name(output)?))
             }
         }
-        None => {
-            // Default: save to "archive.zip" in current directory
-            Ok(OutSink::SaveToFile(PathBuf::from("archive.zip")))
-        }
+        None => Ok(OutSink::SaveToFile(create_file_name(".")?)),
     }
 }
 
@@ -84,7 +82,15 @@ async fn process_files(
         return Ok(());
     }
 
+    println!("Backup output: {:?}", sink);
+
     let compression_decision = config.compress.unwrap_or(false);
+
+    if compression_decision {
+        println!("Using DEFLATE compression")
+    } else {
+        println!("Compression disabled")
+    }
 
     let compression = if compression_decision {
         Compression::Deflate

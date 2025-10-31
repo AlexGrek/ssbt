@@ -71,6 +71,7 @@ where
 /// Alternative: Stream from async readers instead of file paths
 pub async fn stream_zip_from_readers<W, I, R, S>(
     entries: I,
+    compression: Compression,
     output: W,
 ) -> Result<(), Box<dyn std::error::Error>>
 where
@@ -82,7 +83,7 @@ where
     let mut writer = ZipFileWriter::new(output.compat_write());
 
     for (name, reader) in entries {
-        let builder = ZipEntryBuilder::new(name.as_ref().to_string().into(), Compression::Deflate);
+        let builder = ZipEntryBuilder::new(name.as_ref().to_string().into(), compression);
 
         let mut entry_writer = writer.write_entry_stream(builder).await?;
         futures::io::copy(&mut reader.compat(), &mut entry_writer).await?;
