@@ -4,7 +4,7 @@ name: build-multiplatform
 
 steps:
   - name: build
-    image: rust:latest-slim
+    image: rust:1.91.0-slim-bullseye
     environment:
       CARGO_TERM_COLOR: always
     commands:
