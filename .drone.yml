@@ -4,7 +4,7 @@ name: build-multiplatform
 
 steps:
   - name: build
-    image: rust:1.82-slim
+    image: rust:latest-slim
     environment:
       CARGO_TERM_COLOR: always
     commands:
