@@ -23,8 +23,8 @@ $(PLATFORMS):
     export CXX_aarch64_unknown_linux_gnu=aarch64-linux-gnu-g++; \
 	cargo build --release --target $$TARGET; \
 	cp ../target/$$TARGET/release/$(BINARY)* $(RELEASE_DIR)/$@/; \
-	env HASH=$(HASH) envsubst < install_$$(echo $@ | cut -d'-' -f1).sh > $(RELEASE_DIR)/$@/install_$$(echo $@ | cut -d'-' -f1)_$(HASH).sh; \
-	chmod +x $(RELEASE_DIR)/$@/install_$$(echo $@ | cut -d'-' -f1)_$(HASH).sh; \
+	env HASH=$(HASH) envsubst < install_$$(echo $@ | cut -d'-' -f1).sh > $(RELEASE_DIR)/$@/install_$$(echo $@ | cut -d'-' -f1).sh; \
+	chmod +x $(RELEASE_DIR)/$@/install_$$(echo $@ | cut -d'-' -f1).sh; \
 	echo "Built $@ release in $(RELEASE_DIR)/$@"
 
 clean:
