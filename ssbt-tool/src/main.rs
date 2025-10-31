@@ -1,19 +1,15 @@
 pub mod fs_utils;
 pub mod packaging;
-pub mod sink;
 pub mod process;
+pub mod sink;
 
 use anyhow::anyhow;
 use clap::Parser;
 use fs_utils::{list_total_files, total_size};
 use serde::{Deserialize, Serialize};
-use std::{
-    collections::HashMap,
-    env, fs,
-    path::{Path, PathBuf},
-};
+use std::{collections::HashMap, env, fs};
 
-use crate::{fs_utils::encode_size, packaging::zip::stream_zip_to_sink, process::process_files_within_tokio, sink::OutSink};
+use crate::{fs_utils::encode_size, process::process_files_within_tokio};
 
 #[derive(Debug, Serialize, Deserialize, Clone, Default)]
 #[serde(default)]
@@ -163,7 +159,6 @@ fn main() -> anyhow::Result<()> {
     process_files_within_tokio(merged, files).map_err(|e| anyhow!("{}", e))?;
     Ok(())
 }
-
 
 /// Reads environment variables prefixed with SSBT_
 fn read_env() -> Config {

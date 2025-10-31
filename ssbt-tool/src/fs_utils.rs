@@ -1,9 +1,9 @@
+use crate::Config;
+use anyhow::{Context, Result};
 use std::{
     fs,
     path::{Path, PathBuf},
 };
-use anyhow::{Context, Result};
-use crate::Config;
 
 use glob::Pattern;
 

@@ -1,6 +1,9 @@
 use std::path::{Path, PathBuf};
 
-use crate::{Config, packaging::zip::stream_zip_to_sink, sink::OutSink};
+use crate::{
+    Config,
+    sink::{OutSink, stream_zip_to_sink},
+};
 
 fn get_output_sink(config: &Config) -> Result<OutSink, Box<dyn std::error::Error>> {
     match &config.output {
@@ -79,8 +82,6 @@ async fn process_files(
         return Ok(());
     }
 
-    // Stream zip to sink
-    println!("Creating zip archive with {} files...", entries.len());
     stream_zip_to_sink(entries, sink).await?;
     println!("Archive created successfully!");
 
