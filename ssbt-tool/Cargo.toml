@@ -14,6 +14,6 @@ glob = "0.3.3"
 futures = { version = "0.3.31", features = ["io-compat"] }
 tokio = { version = "1.48.0", features = ["rt-multi-thread", "macros", "io-util", "net", "fs"] }
 async_zip = { version = "0.0.18", features = ["full", "tokio", "deflate"] }
-reqwest = { version = "0.12.24", features = ["blocking", "stream"] }
+reqwest = { version = "0.12.24", features = ["blocking", "stream", "rustls-tls"] }
 tokio-util = { version = "0.7.16", features = ["full"] }
 chrono = "0.4.42"
