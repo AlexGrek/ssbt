@@ -8,7 +8,7 @@ steps:
     environment:
       CARGO_TERM_COLOR: always
     commands:
-      - apt-get update && apt-get install -y --no-install-recommends curl ca-certificates gcc g++ pkg-config libssl-dev make gettext
+      - apt-get update && apt-get install -y --no-install-recommends git curl ca-certificates gcc g++ pkg-config libssl-dev make gettext
       - rustup target add x86_64-unknown-linux-gnu aarch64-unknown-linux-gnu x86_64-apple-darwin aarch64-apple-darwin
       - cd ssbt-tool && make all
 
