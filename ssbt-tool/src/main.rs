@@ -156,6 +156,7 @@ fn main() -> anyhow::Result<()> {
     let total = total_size(&merged, &files)?;
     println!("Total files: {}", files.len());
     println!("Total size: {}", encode_size(total));
+    println!("Writing into {}", merged.output.clone().unwrap_or_default());
     process_files_within_tokio(merged, files).map_err(|e| anyhow!("{}", e))?;
     Ok(())
 }
