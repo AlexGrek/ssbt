@@ -20,7 +20,7 @@ $(PLATFORMS):
 		windows-arm64)  TARGET=aarch64-pc-windows-gnu ;; \
 	esac; \
 	cargo build --release --target $$TARGET; \
-	cp target/$$TARGET/release/$(BINARY)* $(RELEASE_DIR)/$@/; \
+	cp ../target/$$TARGET/release/$(BINARY)* $(RELEASE_DIR)/$@/; \
 	env HASH=$(HASH) envsubst < install_$$(echo $@ | cut -d'-' -f1).sh > $(RELEASE_DIR)/$@/install_$$(echo $@ | cut -d'-' -f1)_$(HASH).sh; \
 	chmod +x $(RELEASE_DIR)/$@/install_$$(echo $@ | cut -d'-' -f1)_$(HASH).sh; \
 	echo "Built $@ release in $(RELEASE_DIR)/$@"
