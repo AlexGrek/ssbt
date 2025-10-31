@@ -1,25 +1,200 @@
-use anyhow::Result;
-use bytes::Bytes;
-use chrono::DateTime;
-use futures::{Stream, StreamExt}; // Use futures::Stream
-use std::fs::File;
-use std::io::{Read, Write};
-use std::path::{Path, PathBuf}; // Import Path
-use streaming_zip::{Archive, CompressionMode};
-use tokio::sync::mpsc;
-use tokio::task;
-use tokio_stream::wrappers::ReceiverStream;
+use anyhow::anyhow;
+use async_zip::tokio::write::ZipFileWriter;
+use async_zip::{Compression, ZipEntryBuilder};
+use tokio::fs::File;
+use tokio::io::{AsyncRead, AsyncWrite, AsyncWriteExt};
+use tokio_util::compat::{TokioAsyncWriteCompatExt, TokioAsyncReadCompatExt};
+use futures::io::AsyncWriteExt as FuturesAsyncWriteExt;
+use std::path::{Path, PathBuf};
 
-use crate::packaging::FileEntry;
-
-/// Compression algorithm to use when creating the ZIP.
-#[derive(Debug, Clone, Copy)]
-pub enum Compressor {
-    Deflate,
-    Stored,
+/// Streams files into a zip archive without buffering the entire zip in memory.
+/// 
+/// # Arguments
+/// * `files` - Iterator of (archive_path, file_path) tuples
+/// * `output` - Any async writer (file, network stream, stdout, etc.)
+/// 
+/// # Example
+/// ```no_run
+/// use tokio::fs::File;
+/// 
+/// #[tokio::main]
+/// async fn main() -> Result<(), Box<dyn std::error::Error>> {
+///     let files = vec![
+///         ("document.txt", "/path/to/file1.txt"),
+///         ("folder/image.png", "/path/to/file2.png"),
+///     ];
+///     
+///     // Stream to file
+///     let output = File::create("archive.zip").await?;
+///     stream_zip_to_writer(files, output).await?;
+///     
+///     // Or stream to HTTP response, S3, etc.
+///     Ok(())
+/// }
+/// ```
+pub async fn stream_zip_to_writer<W, I, S1, S2>(
+    files: I,
+    output: W,
+) -> Result<(), Box<dyn std::error::Error>>
+where
+    W: AsyncWrite + Unpin,
+    I: IntoIterator<Item = (S1, S2)>,
+    S1: AsRef<str>,
+    S2: AsRef<Path>,
+{
+    // Wrap with compat for async-zip which uses futures::io traits
+    let mut writer = ZipFileWriter::new(output.compat_write());
+    
+    for (archive_name, file_path) in files {
+        let file_path = file_path.as_ref();
+        let mut file = File::open(file_path).await?;
+        
+        // Get file metadata for proper zip entry
+        let metadata = tokio::fs::metadata(file_path).await?;
+        
+        let builder = ZipEntryBuilder::new(
+            archive_name.as_ref().to_string().into(),
+            Compression::Deflate,
+        )
+        .last_modification_date(get_modification_time(&metadata));
+        
+        // Stream file directly into zip entry with small buffer
+        let mut entry_writer = writer.write_entry_stream(builder).await?;
+        
+        // Use futures::io::copy since entry_writer uses futures traits
+        futures::io::copy(&mut file.compat(), &mut entry_writer).await?;
+        entry_writer.close().await?;
+    }
+    
+    // Finalize zip (writes central directory)
+    writer.close().await?;
+    
+    Ok(())
 }
 
-/// Defines the destination for the generated ZIP archive.
+/// Alternative: Stream from async readers instead of file paths
+pub async fn stream_zip_from_readers<W, I, R, S>(
+    entries: I,
+    output: W,
+) -> Result<(), Box<dyn std::error::Error>>
+where
+    W: AsyncWrite + Unpin,
+    I: IntoIterator<Item = (S, R)>,
+    R: AsyncRead + Unpin,
+    S: AsRef<str>,
+{
+    let mut writer = ZipFileWriter::new(output.compat_write());
+    
+    for (name, mut reader) in entries {
+        let builder = ZipEntryBuilder::new(
+            name.as_ref().to_string().into(),
+            Compression::Deflate,
+        );
+        
+        let mut entry_writer = writer.write_entry_stream(builder).await?;
+        futures::io::copy(&mut reader.compat(), &mut entry_writer).await?;
+        entry_writer.close().await?;
+    }
+    
+    writer.close().await?;
+    Ok(())
+}
+
+fn get_modification_time(metadata: &std::fs::Metadata) -> async_zip::ZipDateTime {
+    use std::time::SystemTime;
+    
+    metadata
+        .modified()
+        .ok()
+        .and_then(|t| t.duration_since(SystemTime::UNIX_EPOCH).ok())
+        .and_then(|d| {
+            chrono::DateTime::from_timestamp(d.as_secs() as i64, 0)
+        })
+        .and_then(|dt| {
+            Some(async_zip::ZipDateTime::from_chrono(&dt))
+        })
+        .unwrap_or_else(async_zip::ZipDateTime::default)
+}
+
+// Example usage with different outputs
+#[cfg(test)]
+mod examples {
+    use super::*;
+    use tokio::io::AsyncWriteExt;
+    
+    // Stream to file
+    async fn example_to_file() -> Result<(), Box<dyn std::error::Error>> {
+        let files = vec![
+            ("readme.txt", "/tmp/readme.txt"),
+            ("data/config.json", "/tmp/config.json"),
+        ];
+        
+        let output = File::create("output.zip").await?;
+        stream_zip_to_writer(files, output).await?;
+        Ok(())
+    }
+    
+    // Stream to network (e.g., HTTP response)
+    async fn example_to_network() -> Result<(), Box<dyn std::error::Error>> {
+        let files = vec![
+            ("file1.txt", "/tmp/file1.txt"),
+        ];
+        
+        // In actix-web or axum, this could be the response body stream
+        let tcp_stream = tokio::net::TcpStream::connect("127.0.0.1:8080").await?;
+        stream_zip_to_writer(files, tcp_stream).await?;
+        Ok(())
+    }
+    
+    // Stream to S3 or cloud storage
+    async fn example_to_buffer() -> Result<Vec<u8>, Box<dyn std::error::Error>> {
+        let files = vec![
+            ("test.txt", "/tmp/test.txt"),
+        ];
+        
+        let mut buffer = Vec::new();
+        stream_zip_to_writer(files, &mut buffer).await?;
+        Ok(buffer)
+    }
+}
+
+/// Creates a file writer for streaming zip output.
+/// Automatically creates parent directories if they don't exist.
+/// 
+/// # Example
+/// ```no_run
+/// use tokio::fs::File;
+/// 
+/// #[tokio::main]
+/// async fn main() -> Result<(), Box<dyn std::error::Error>> {
+///     let files = vec![
+///         ("document.txt", "/path/to/file1.txt"),
+///         ("image.png", "/path/to/file2.png"),
+///     ];
+///     
+///     let writer = create_file_writer("output/archive.zip").await?;
+///     stream_zip_to_writer(files, writer).await?;
+///     Ok(())
+/// }
+/// ```
+pub async fn create_file_writer<P: AsRef<Path>>(
+    path: P,
+) -> Result<File, Box<dyn std::error::Error>> {
+    let path = path.as_ref();
+    
+    // Create parent directories if they don't exist
+    if let Some(parent) = path.parent() {
+        tokio::fs::create_dir_all(parent).await?;
+    }
+    
+    // Create the file
+    let file = File::create(path).await?;
+    
+    Ok(file)
+}
+
+/// Defines where the zip archive should be sent.
+#[derive(Debug, Clone)]
 pub enum OutSink {
     /// Save the archive to a local file at the given path.
     SaveToFile(PathBuf),
@@ -27,115 +202,87 @@ pub enum OutSink {
     UploadToUrl(String),
 }
 
-// --- The Core Async Solution (Unchanged) ---
-
-struct WriterToAsyncChannel {
-    sender: mpsc::Sender<Result<Vec<u8>>>,
-}
-
-impl Write for WriterToAsyncChannel {
-    fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
-        self.sender
-            .blocking_send(Ok(buf.to_vec()))
-            .map_err(|e| std::io::Error::new(std::io::ErrorKind::BrokenPipe, e.to_string()))?;
-        Ok(buf.len())
-    }
-
-    fn flush(&mut self) -> std::io::Result<()> {
-        Ok(())
-    }
-}
-
-pub fn package_zip_streaming_async(
-    compressor: Compressor,
-    files: Vec<FileEntry>,
-) -> impl Stream<Item = Result<Bytes>> {
-    let (tx, rx) = mpsc::channel::<Result<Vec<u8>>>(4);
-
-    task::spawn_blocking(move || {
-        let compression = match compressor {
-            Compressor::Deflate => CompressionMode::Deflate(8),
-            Compressor::Stored => CompressionMode::Store,
-        };
-        let mut pipe = WriterToAsyncChannel { sender: tx.clone() };
-        let mut archive = Archive::new(&mut pipe);
-        let mut buf = [0u8; 8192];
-
-        for fe in files {
-            let mut f = match File::open(&fe.path) {
-                Ok(f) => f,
-                Err(e) => {
-                    let _ = tx.blocking_send(Err(e.into()));
-                    return;
-                }
-            };
-
-            if let Err(e) = archive.start_new_file(
-                fe.name_in_archive.as_bytes().to_vec(),
-                DateTime::from_timestamp(0, 0).unwrap().naive_local(),
-                compression,
-                true,
-            ) {
-                let _ = tx.blocking_send(Err(anyhow::anyhow!("Failed to start new file: {:?}", e)));
-                return;
-            }
-
-            loop {
-                match f.read(&mut buf) {
-                    Ok(0) => break,
-                    Ok(n) => {
-                        if let Err(e) = archive.append_data(&buf[..n]) {
-                            let _ = tx.blocking_send(Err(anyhow::anyhow!("Failed to append data: {:?}", e)));
-                            return;
-                        }
-                    }
-                    Err(ref e) if e.kind() == std::io::ErrorKind::Interrupted => continue,
-                    Err(e) => {
-                        let _ = tx.blocking_send(Err(e.into()));
-                        return;
-                    }
-                }
-            }
-            if let Err(e) = archive.finish_file() {
-                let _ = tx.blocking_send(Err(anyhow::anyhow!("Failed to finish file: {:?}", e)));
-                return;
-            }
-        }
-        if let Err(e) = archive.finish() {
-            let _ = tx.blocking_send(Err(anyhow::anyhow!("Failed to finish archive: {:?}", e)));
-        }
-    });
-
-    ReceiverStream::new(rx).map(|r| r.map(Bytes::from))
-}
-
-// --- Example Async Consumers (One small improvement) ---
-
-pub async fn send_http_async<S>(url: &str, stream: S) -> Result<()>
+/// Streams zip archive to the specified output sink.
+/// 
+/// # Example
+/// ```no_run
+/// use std::path::PathBuf;
+/// 
+/// #[tokio::main]
+/// async fn main() -> Result<(), Box<dyn std::error::Error>> {
+///     let files = vec![
+///         ("readme.txt", "/tmp/readme.txt"),
+///         ("config.json", "/tmp/config.json"),
+///     ];
+///     
+///     // Save to file
+///     let sink = OutSink::SaveToFile(PathBuf::from("backups/archive.zip"));
+///     stream_zip_to_sink(files.clone(), sink).await?;
+///     
+///     // Upload via HTTP
+///     let sink = OutSink::UploadToUrl("https://api.example.com/upload".to_string());
+///     stream_zip_to_sink(files, sink).await?;
+///     
+///     Ok(())
+/// }
+/// ```
+pub async fn stream_zip_to_sink<I, S1, S2>(
+    files: I,
+    sink: OutSink,
+) -> Result<(), Box<dyn std::error::Error>>
 where
-    S: Stream<Item = Result<Bytes, anyhow::Error>> + Send + Sync + 'static,
+    I: IntoIterator<Item = (S1, S2)>,
+    S1: AsRef<str>,
+    S2: AsRef<Path>,
 {
-    let body = reqwest::Body::wrap_stream(stream);
-    let client = reqwest::Client::new();
-    let resp = client.post(url).body(body).send().await?;
-    println!("Async HTTP response: {}", resp.status());
-    resp.error_for_status()?;
+    match sink {
+        OutSink::SaveToFile(path) => {
+            let writer = create_file_writer(path).await?;
+            stream_zip_to_writer(files, writer).await?;
+        }
+        OutSink::UploadToUrl(url) => {
+            // Create a pipe: writer end for zip, reader end for HTTP
+            let (writer, reader) = tokio::io::duplex(8192);
+            
+            let client = reqwest::Client::new();
+            
+            // Spawn HTTP upload task
+            let upload_task = tokio::spawn(async move {
+                let response = client
+                    .post(&url)
+                    .header("Content-Type", "application/zip")
+                    .body(reqwest::Body::wrap_stream(
+                        tokio_util::io::ReaderStream::new(reader)
+                    ))
+                    .send()
+                    .await?;
+                
+                if !response.status().is_success() {
+                    return Err(format!(
+                        "Upload failed with status: {}",
+                        response.status()
+                    ).into());
+                }
+                
+                Ok::<_, Box<dyn std::error::Error + Send + Sync>>(())
+            });
+            
+            // Stream zip to the writer end
+            stream_zip_to_writer(files, writer).await?;
+            
+            // Wait for upload to complete and convert the error
+            upload_task.await.map_err(|e| Box::new(e) as Box<dyn std::error::Error>)?.map_err(|e| anyhow!(e))?;
+        }
+    }
+    
     Ok(())
 }
 
-/// Saves ZIP data to a local file asynchronously (now generic over path).
-pub async fn save_file_async<S, P>(path: P, mut stream: S) -> Result<()>
-where
-    S: Stream<Item = Result<Bytes>> + Unpin,
-    P: AsRef<Path>, // More idiomatic: accepts &str, String, PathBuf
-{
-    use tokio::fs::File;
-    use tokio::io::AsyncWriteExt;
-
-    let mut f = File::create(path).await?;
-    while let Some(chunk_result) = stream.next().await {
-        f.write_all(&chunk_result?).await?;
-    }
-    f.flush().await?;
-    Ok(())
-}
+// Cargo.toml dependencies:
+// [dependencies]
+// async-zip = { version = "0.0.17", features = ["tokio", "deflate"] }
+// tokio = { version = "1", features = ["fs", "io-util", "rt", "macros"] }
+// tokio-util = { version = "0.7", features = ["io", "compat"] }
+// futures = "0.3"
+// reqwest = { version = "0.12", features = ["stream"] }
+// chrono = "0.4"

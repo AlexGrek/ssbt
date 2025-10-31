@@ -1,10 +1,11 @@
 pub mod fs_utils;
 pub mod packaging;
+pub mod sink;
 
 use clap::Parser;
+use fs_utils::{list_total_files, total_size};
 use serde::{Deserialize, Serialize};
 use std::{collections::HashMap, env, fs};
-use fs_utils::{list_total_files, total_size};
 
 use crate::fs_utils::encode_size;
 

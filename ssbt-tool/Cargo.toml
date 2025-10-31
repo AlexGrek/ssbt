@@ -19,7 +19,5 @@ async_zip = { version = "0.0.18", features = ["full", "tokio", "deflate"] }
 async-stream = "0.3.6"
 reqwest = { version = "0.12.24", features = ["blocking", "stream"] }
 tokio-util = { version = "0.7.16", features = ["full"] }
-zip = "6.0.0"
-streaming-zip = "0.5.0"
 chrono = "0.4.42"
 tokio-stream = { version = "0.1.17", features = ["fs", "sync"] }
