@@ -2,6 +2,7 @@ pub mod fs_utils;
 pub mod packaging;
 pub mod process;
 pub mod sink;
+pub mod shell_exec;
 
 use anyhow::anyhow;
 use clap::Parser;
@@ -157,7 +158,14 @@ fn main() -> anyhow::Result<()> {
     println!("Total files: {}", files.len());
     println!("Total size: {}", encode_size(total));
     println!("Writing into {}", merged.output.clone().unwrap_or_default());
+    if merged.before.as_ref().is_some_and(|x| !x.is_empty()) {
+        shell_exec::execute_and_stream_command(merged.before.as_ref().unwrap())?;
+    }
+    let after = merged.after.clone();
     process_files_within_tokio(merged, files).map_err(|e| anyhow!("{}", e))?;
+    if after.as_ref().is_some_and(|x| !x.is_empty()) {
+        shell_exec::execute_and_stream_command(after.as_ref().unwrap())?;
+    }
     Ok(())
 }
 
