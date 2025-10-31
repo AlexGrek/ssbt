@@ -32,8 +32,6 @@ pub fn execute_and_stream_command(command: &str) -> Result<()> {
         .context("Child process did not have a stdout handle")?;
 
     let reader = BufReader::new(stdout);
-
-    println!("\n--- Real-time Output Start for: '{}' ---", command);
     
     // --- 3. Read and print output line-by-line in real-time ---
     for line in reader.lines() {
@@ -45,7 +43,6 @@ pub fn execute_and_stream_command(command: &str) -> Result<()> {
             }
         }
     }
-    println!("--- Real-time Output End ---");
 
     // --- 4. Wait for the command to finish and check the exit status ---
     let status = child.wait()
