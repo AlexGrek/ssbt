@@ -10,12 +10,12 @@ steps:
     commands:
       - apt-get update && apt-get install -y --no-install-recommends curl ca-certificates gcc g++ pkg-config libssl-dev make gettext
       - rustup target add \
-          x86_64-unknown-linux-gnu \
-          aarch64-unknown-linux-gnu \
-          x86_64-apple-darwin \
-          aarch64-apple-darwin \
-          x86_64-pc-windows-gnu \
-          aarch64-pc-windows-gnu
+        x86_64-unknown-linux-gnu \
+        aarch64-unknown-linux-gnu \
+        x86_64-apple-darwin \
+        aarch64-apple-darwin \
+        x86_64-pc-windows-gnu \
+        aarch64-pc-windows-gnu
       - cd ssbt-tool && make all
 
   - name: artifacts
@@ -30,6 +30,8 @@ steps:
   - name: upload
     image: plugins/s3
     settings:
+      endpoint:
+        from_secret: s3_endpoint
       bucket:
         from_secret: s3_bucket
       access_key:
