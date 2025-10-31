@@ -1,7 +1,7 @@
 SHELL := /bin/bash -e
 HASH := $(shell git rev-parse --short HEAD)
 RELEASE_DIR := release/$(HASH)
-PLATFORMS := linux-x86_64 linux-arm64
+PLATFORMS := linux-x86_64
 BINARY := ssbt-tool
 
 .PHONY: all $(PLATFORMS) clean
