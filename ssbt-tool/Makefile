@@ -2,7 +2,7 @@ SHELL := /bin/bash -e
 HASH := $(shell git rev-parse --short HEAD)
 RELEASE_DIR := release/$(HASH)
 PLATFORMS := linux-x86_64 linux-arm64 macos-x86_64 macos-arm64
-BINARY := myapp
+BINARY := ssbt-cli
 
 .PHONY: all $(PLATFORMS) clean
 
