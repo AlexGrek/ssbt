@@ -8,27 +8,10 @@ pub mod sink;
 use anyhow::anyhow;
 use clap::Parser;
 use fs_utils::{list_total_files, total_size};
-use serde::{Deserialize, Serialize};
+use ssbt_lib::Config;
 use std::{collections::HashMap, env, fs};
 
 use crate::{fs_utils::encode_size, process::process_files_within_tokio};
-
-#[derive(Debug, Serialize, Deserialize, Clone, Default)]
-#[serde(default)]
-pub struct Config {
-    output: Option<String>,
-    config: Option<String>,
-    format: Option<String>,
-    authentication: Option<String>,
-    protocol: Option<String>,
-    dry: Option<bool>,
-    max_size: Option<u64>,
-    before: Option<String>,
-    after: Option<String>,
-    paths: Option<Vec<String>>,
-    skip: Option<Vec<String>>,
-    compress: Option<bool>,
-}
 
 #[derive(Parser, Debug)]
 #[command(author, version, about = "SSBT CLI Backup Tool", long_about = None)]
