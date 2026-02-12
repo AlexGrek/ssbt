@@ -60,6 +60,30 @@ pub struct Cli {
     #[arg(long, action = clap::ArgAction::SetTrue)]
     pub compress: bool,
 
+    /// S3 region
+    #[arg(long)]
+    pub s3_region: Option<String>,
+
+    /// S3-compatible endpoint URL (for MinIO, etc.)
+    #[arg(long)]
+    pub s3_endpoint: Option<String>,
+
+    /// S3 access key
+    #[arg(long)]
+    pub s3_access_key: Option<String>,
+
+    /// S3 secret key
+    #[arg(long)]
+    pub s3_secret_key: Option<String>,
+
+    /// FTP username
+    #[arg(long)]
+    pub ftp_user: Option<String>,
+
+    /// FTP password
+    #[arg(long)]
+    pub ftp_password: Option<String>,
+
     /// Generate YAML config to stdout
     #[arg(long, action = clap::ArgAction::SetTrue)]
     pub generate_yaml_config: bool,
@@ -180,6 +204,12 @@ fn read_env() -> Config {
     });
     cfg.compress =
         get_env!("COMPRESS").map(|v| v == "true" || v == "1" || v.eq_ignore_ascii_case("yes"));
+    cfg.s3_region = get_env!("S3_REGION");
+    cfg.s3_endpoint = get_env!("S3_ENDPOINT");
+    cfg.s3_access_key = get_env!("S3_ACCESS_KEY");
+    cfg.s3_secret_key = get_env!("S3_SECRET_KEY");
+    cfg.ftp_user = get_env!("FTP_USER");
+    cfg.ftp_password = get_env!("FTP_PASSWORD");
     cfg
 }
 
@@ -218,6 +248,12 @@ fn cli_to_config(cli: &Cli) -> Config {
             Some(cli.skip.clone())
         },
         compress: Some(cli.compress),
+        s3_region: cli.s3_region.clone(),
+        s3_endpoint: cli.s3_endpoint.clone(),
+        s3_access_key: cli.s3_access_key.clone(),
+        s3_secret_key: cli.s3_secret_key.clone(),
+        ftp_user: cli.ftp_user.clone(),
+        ftp_password: cli.ftp_password.clone(),
     }
 }
 
@@ -240,5 +276,11 @@ fn merge_configs(env: Config, file: Config, cli: Config) -> Config {
         paths: pick(env.paths, file.paths, cli.paths),
         skip: pick(env.skip, file.skip, cli.skip),
         compress: pick(env.compress, file.compress, cli.compress),
+        s3_region: pick(env.s3_region, file.s3_region, cli.s3_region),
+        s3_endpoint: pick(env.s3_endpoint, file.s3_endpoint, cli.s3_endpoint),
+        s3_access_key: pick(env.s3_access_key, file.s3_access_key, cli.s3_access_key),
+        s3_secret_key: pick(env.s3_secret_key, file.s3_secret_key, cli.s3_secret_key),
+        ftp_user: pick(env.ftp_user, file.ftp_user, cli.ftp_user),
+        ftp_password: pick(env.ftp_password, file.ftp_password, cli.ftp_password),
     }
 }

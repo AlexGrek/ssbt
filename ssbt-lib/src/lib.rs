@@ -15,4 +15,10 @@ pub struct Config {
     pub paths: Option<Vec<String>>,
     pub skip: Option<Vec<String>>,
     pub compress: Option<bool>,
+    pub s3_region: Option<String>,
+    pub s3_endpoint: Option<String>,
+    pub s3_access_key: Option<String>,
+    pub s3_secret_key: Option<String>,
+    pub ftp_user: Option<String>,
+    pub ftp_password: Option<String>,
 }

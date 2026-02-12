@@ -9,16 +9,89 @@ use crate::{
 };
 
 fn get_output_sink(config: &Config) -> Result<OutSink, Box<dyn std::error::Error>> {
-    match &config.output {
-        Some(output) => {
+    let protocol = config.protocol.as_deref().unwrap_or("http");
+    let output = config.output.as_deref().unwrap_or(".");
+
+    match protocol {
+        "ftp" | "ftps" => {
+            // output format: host:port/remote/path/file.zip  or  host/remote/path/file.zip
+            let (host, port, remote_path) = parse_ftp_output(output)?;
+            Ok(OutSink::UploadViaFtp {
+                host,
+                port,
+                remote_path,
+                user: config.ftp_user.clone().unwrap_or_else(|| "anonymous".into()),
+                password: config.ftp_password.clone().unwrap_or_default(),
+                secure: protocol == "ftps",
+            })
+        }
+        "s3" => {
+            // output format: bucket/key/path.zip
+            let (bucket, key) = parse_s3_output(output)?;
+            Ok(OutSink::UploadToS3 {
+                bucket,
+                key,
+                region: config
+                    .s3_region
+                    .clone()
+                    .unwrap_or_else(|| "us-east-1".into()),
+                endpoint: config.s3_endpoint.clone(),
+                access_key: config.s3_access_key.clone(),
+                secret_key: config.s3_secret_key.clone(),
+            })
+        }
+        "scp" | "ssh" | "sftp" => {
+            Err(format!(
+                "Protocol '{}' is not supported: no pure-Rust async streaming library available",
+                protocol
+            )
+            .into())
+        }
+        "http" | "https" => {
             if output.starts_with("http://") || output.starts_with("https://") {
-                Ok(OutSink::UploadToUrl(output.clone()))
+                Ok(OutSink::UploadToUrl(output.to_string()))
             } else {
                 Ok(OutSink::SaveToFile(create_file_name(output)?))
             }
         }
-        None => Ok(OutSink::SaveToFile(create_file_name(".")?)),
+        _ => Ok(OutSink::SaveToFile(create_file_name(output)?)),
     }
+}
+
+/// Parses FTP output string into (host, port, remote_path).
+/// Accepted formats: `host:port/path`, `host/path`.
+fn parse_ftp_output(output: &str) -> Result<(String, u16, String), Box<dyn std::error::Error>> {
+    let output = output
+        .trim_start_matches("ftp://")
+        .trim_start_matches("ftps://");
+
+    let (host_port, remote_path) = output
+        .split_once('/')
+        .ok_or("FTP output must be in format host[:port]/remote/path/file.zip")?;
+
+    let (host, port) = if let Some((h, p)) = host_port.split_once(':') {
+        (h.to_string(), p.parse::<u16>()?)
+    } else {
+        (host_port.to_string(), 21)
+    };
+
+    Ok((host, port, format!("/{}", remote_path)))
+}
+
+/// Parses S3 output string into (bucket, key).
+/// Accepted formats: `bucket/key/path.zip`, `s3://bucket/key/path.zip`.
+fn parse_s3_output(output: &str) -> Result<(String, String), Box<dyn std::error::Error>> {
+    let output = output.trim_start_matches("s3://");
+
+    let (bucket, key) = output
+        .split_once('/')
+        .ok_or("S3 output must be in format bucket/key/path.zip")?;
+
+    if bucket.is_empty() || key.is_empty() {
+        return Err("S3 bucket and key must not be empty".into());
+    }
+
+    Ok((bucket.to_string(), key.to_string()))
 }
 
 fn prepare_entries(files: Vec<PathBuf>, base_path: Option<&Path>) -> Vec<(String, PathBuf)> {
