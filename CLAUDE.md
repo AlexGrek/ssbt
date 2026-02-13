@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-SSBT (Simple Secure Backup Tool) is a Rust CLI backup utility that creates ZIP archives from specified paths with support for glob-based skip patterns, compression, size limits, pre/post hooks, and HTTP upload.
+SSBT (Simple Secure Backup Tool) is a Rust CLI backup utility that creates ZIP archives from specified paths with support for glob-based skip patterns, compression, size limits, pre/post hooks, and multiple upload protocols (HTTP, FTP/FTPS, S3).
 
 ## Build Commands
 
@@ -37,20 +37,22 @@ Key modules in `ssbt-tool/src/`:
 | Module | Role |
 |---|---|
 | `main.rs` | CLI parsing (clap derive), config merging, entry point orchestration |
-| `process.rs` | Orchestrates backup: determines output sink (file vs URL), streams files into ZIP |
+| `process.rs` | Orchestrates backup: determines output sink based on `--protocol` flag, streams files into ZIP |
 | `fs_utils.rs` | Recursive file listing with glob skip patterns, size calculation, human-readable size encoding (supports Ki/Mi/Gi and KB/MB/GB units) |
 | `naming.rs` | Output filename template expansion (`%datetime%`, `%rand%`, `%pwd%`, `%unix%`, etc.) |
 | `shell_exec.rs` | Executes pre/post hook shell commands with real-time stdout streaming |
 | `packaging/zip.rs` | Async ZIP creation using `async-zip` with optional DEFLATE compression |
 | `packaging/tar.rs` | TAR support — **stub, not implemented** |
-| `sink/mod.rs` | `OutSink` enum routing to file or network output |
+| `sink/mod.rs` | `OutSink` enum (`SaveToFile`, `UploadToUrl`, `UploadViaFtp`, `UploadToS3`) + duplex-pipe dispatch |
 | `sink/save_file.rs` | File writer with automatic parent directory creation |
-| `sink/send_net.rs` | Network upload — **stub, not implemented** |
+| `sink/send_net.rs` | FTP/FTPS upload via `suppaftp` (async, streaming) |
+| `sink/send_s3.rs` | S3 upload via `rust-s3` (async, streaming). Supports custom endpoints for S3-compatible services |
 
 ## Key Design Decisions
 
 - **Async-first**: Uses Tokio runtime for all I/O. ZIP streaming is fully async via `async-zip`.
-- **Memory-efficient streaming**: Archives are streamed through a tokio duplex pipe rather than buffered in memory, both for file output and HTTP upload.
+- **Memory-efficient streaming**: Archives are streamed through a tokio duplex pipe rather than buffered in memory. All network sinks (HTTP, FTP, S3) use this pattern: spawn upload task on reader end, stream ZIP to writer end.
 - **Exit code 42**: Used when backup exceeds `max_size` limit.
 - **Compression off by default**: Must be explicitly enabled with `--compress`.
+- **Protocol-based sink routing**: `--protocol` flag (`http`, `ftp`, `ftps`, `s3`) drives which `OutSink` variant is constructed in `process.rs::get_output_sink()`. SCP/SSH/SFTP are rejected at runtime (no pure-Rust async streaming library available).
 - **Rust 2024 edition**.

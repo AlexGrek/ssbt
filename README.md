@@ -6,7 +6,7 @@ A powerful, flexible CLI backup tool built with Rust that supports multiple conf
 
 - 🔧 **Multiple Configuration Sources**: Command-line arguments, config files (YAML/JSON), and environment variables
 - 📦 **Multiple Archive Formats**: ZIP, 7z, and TAR support
-- 🌐 **Protocol Flexibility**: HTTP, HTTPS, multipart uploads, SCP, and TUS resumable uploads
+- 🌐 **Protocol Flexibility**: HTTP, HTTPS, FTP, FTPS, and S3-compatible storage
 - 🎯 **Smart Filtering**: Skip patterns to exclude unwanted files
 - 💾 **Size Controls**: Set maximum backup size limits
 - 🔐 **Secure Authentication**: Token-based authentication support
@@ -85,13 +85,19 @@ Options:
   -c, --config <CONFIG>              Configuration file (YAML or JSON)
   -f, --format <FORMAT>              Output format [zip|7z|tar] (default: zip)
       --authentication <TOKEN>       Authentication token
-      --protocol <PROTOCOL>          Protocol [http|https|multipart|scp|tus] (default: http)
+      --protocol <PROTOCOL>          Protocol [http|https|ftp|ftps|s3] (default: http)
   -d, --dry                          Dry run (just list files and parameters)
   -m, --max-size <SIZE>              Max size limit in bytes (0 = unlimited)
   -b, --before <COMMAND>             Command to execute before backup
   -a, --after <COMMAND>              Command to execute after backup
   -s, --skip <PATTERN>               Patterns to skip (can be specified multiple times)
       --compress                     Enable compression
+      --s3-region <REGION>           S3 region (default: us-east-1)
+      --s3-endpoint <URL>            S3-compatible endpoint URL (for MinIO, etc.)
+      --s3-access-key <KEY>          S3 access key (or use AWS_ACCESS_KEY_ID env)
+      --s3-secret-key <KEY>          S3 secret key (or use AWS_SECRET_ACCESS_KEY env)
+      --ftp-user <USER>              FTP username (default: anonymous)
+      --ftp-password <PASSWORD>      FTP password
       --generate-yaml-config         Generate YAML config to stdout
   -h, --help                         Print help
   -V, --version                      Print version
@@ -123,6 +129,16 @@ paths:
   - /home/user/documents
   - /home/user/projects
   - /etc/nginx
+
+# S3 settings (when protocol: s3)
+s3_region: us-east-1
+s3_endpoint: null          # set for S3-compatible services
+s3_access_key: null        # or use AWS_ACCESS_KEY_ID env
+s3_secret_key: null        # or use AWS_SECRET_ACCESS_KEY env
+
+# FTP settings (when protocol: ftp or ftps)
+ftp_user: anonymous
+ftp_password: null
 ```
 
 Use it:
@@ -160,6 +176,12 @@ export SSBT_BEFORE="echo 'Starting backup...'"
 export SSBT_AFTER="echo 'Backup complete!'"
 export SSBT_SKIP="*.log,*.tmp,node_modules,.git"
 export SSBT_PATHS="/home/user/documents,/home/user/projects"
+export SSBT_S3_REGION=us-east-1
+export SSBT_S3_ENDPOINT=http://localhost:9000
+export SSBT_S3_ACCESS_KEY=your-access-key
+export SSBT_S3_SECRET_KEY=your-secret-key
+export SSBT_FTP_USER=admin
+export SSBT_FTP_PASSWORD=secret
 
 ssbt  # Will use environment variables
 ```
@@ -232,17 +254,25 @@ ssbt --output backup.zip \
 Choose your upload protocol:
 
 ```bash
-# Standard HTTP
+# Standard HTTP POST
 ssbt --output https://backup.example.com/upload --protocol http /path/to/dir
 
-# Secure HTTPS
-ssbt --output https://backup.example.com/upload --protocol https /path/to/dir
+# FTP
+ssbt --output ftp.example.com/backups/backup.zip --protocol ftp \
+  --ftp-user admin --ftp-password secret /path/to/dir
 
-# SCP to remote server
-ssbt --output user@server:/backups/backup.zip --protocol scp /path/to/dir
+# FTPS (FTP over TLS)
+ssbt --output ftp.example.com/backups/backup.zip --protocol ftps \
+  --ftp-user admin --ftp-password secret /path/to/dir
 
-# TUS resumable uploads
-ssbt --output https://tus.example.com/files/ --protocol tus /path/to/dir
+# S3 (output format: bucket/key)
+ssbt --output my-bucket/backups/backup.zip --protocol s3 \
+  --s3-region us-east-1 /path/to/dir
+
+# S3-compatible (MinIO, etc.)
+ssbt --output my-bucket/backups/backup.zip --protocol s3 \
+  --s3-region us-east-1 --s3-endpoint http://localhost:9000 \
+  --s3-access-key minioadmin --s3-secret-key minioadmin /path/to/dir
 ```
 
 ### Authentication
@@ -292,11 +322,14 @@ ssbt --config project-backup.yaml
 ### Multi-Environment Configuration
 
 ```bash
-# Development
+# Development - local file
 SSBT_OUTPUT=/dev/backups/dev.zip SSBT_PROTOCOL=http ssbt /app
 
-# Production
-SSBT_OUTPUT=s3://backups/prod.zip SSBT_PROTOCOL=https SSBT_AUTHENTICATION=$SECRET ssbt /app
+# Production - S3
+SSBT_OUTPUT=my-bucket/backups/prod.zip SSBT_PROTOCOL=s3 SSBT_S3_REGION=us-east-1 ssbt /app
+
+# Staging - FTPS
+SSBT_OUTPUT=ftp.staging.example.com/backups/staging.zip SSBT_PROTOCOL=ftps ssbt /app
 ```
 
 ## 🛠️ Development
@@ -344,8 +377,11 @@ Found a bug? Please [open an issue](https://github.com/yourusername/ssbt/issues)
 ✅ File listing and size calculation
 ✅ Skip patterns
 ✅ Compression options
-🚧 Archive creation (in progress)
-🚧 Upload protocols (in progress)
+✅ ZIP archive creation
+✅ HTTP upload
+✅ FTP/FTPS upload
+✅ S3 upload (including S3-compatible services)
+🚧 TAR/7z archive formats (in progress)
 🚧 Authentication (in progress)
 
 ---
