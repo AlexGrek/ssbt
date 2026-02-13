@@ -1,0 +1,12 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git -C \"c:\\\\Users\\\\AlexG\\\\Documents\\\\dev\\\\ssbt\" show 8c331b7 --stat)",
+      "Bash(find:*)",
+      "Bash(bash:*)"
+    ],
+    "additionalDirectories": [
+      "c:\\Users\\AlexG\\Documents\\dev\\ssbt\\.github"
+    ]
+  }
+}

@@ -1,0 +1,2 @@
+This file lives in a subdirectory.
+It tests that directory structure is preserved in the archive.

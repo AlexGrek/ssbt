@@ -99,18 +99,18 @@ fn prepare_entries(files: Vec<PathBuf>, base_path: Option<&Path>) -> Vec<(String
         .into_iter()
         .map(|file_path| {
             // Determine the path to use inside the zip archive
+            // ZIP spec requires forward slashes for path separators
             let archive_name = if let Some(base) = base_path {
                 file_path
                     .strip_prefix(base)
                     .unwrap_or(&file_path)
                     .to_string_lossy()
-                    .to_string()
+                    .replace('\\', "/")
             } else {
-                // Use just the filename if no base path
                 file_path
                     .file_name()
-                    .map(|n| n.to_string_lossy().to_string())
-                    .unwrap_or_else(|| file_path.to_string_lossy().to_string())
+                    .map(|n| n.to_string_lossy().replace('\\', "/"))
+                    .unwrap_or_else(|| file_path.to_string_lossy().replace('\\', "/"))
             };
 
             (archive_name, file_path)
